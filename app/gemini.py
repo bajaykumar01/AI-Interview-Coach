@@ -177,3 +177,32 @@ Provide a comprehensive, detailed final analysis report based on their performan
     )
 
     return json.loads(response.text)
+
+
+class ResumeProfileSchema(BaseModel):
+    skills: list[str] = Field(description="List of key technical or professional skills present in the resume")
+    summary: str = Field(description="A concise 2-sentence summary of the candidate's career background and projects")
+    recommended_role: str = Field(description="A single recommended job role or title matching their profile (e.g. Java Developer, React Engineer, Data Scientist)")
+
+def extract_resume_profile(resume_text: str) -> dict:
+    prompt = f"""
+You are an expert recruiter and technical assessor.
+Analyze the candidate's resume text below and extract:
+1. A list of key technical/professional skills.
+2. A short, concise 2-sentence summary of their background, key experience, and key projects.
+3. The most suitable target job role or title (e.g. 'Python Developer', 'React Developer', 'Machine Learning Engineer', etc.) based on their profile.
+
+Resume Text:
+{resume_text}
+"""
+
+    response = get_client().models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": ResumeProfileSchema,
+        }
+    )
+
+    return json.loads(response.text)

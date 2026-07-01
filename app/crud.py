@@ -45,22 +45,30 @@ def create_interview(
     interview: schemas.InterviewCreate,
     current_user: models.User
 ):
+    # Enforce resume target role & difficulty if Resume-Based Mode is enabled
+    role = current_user.resume_role if (interview.is_resume_based and current_user.resume_role) else interview.role
+    difficulty = "Hard" if interview.is_resume_based else interview.difficulty
+
     # Create interview session
     new_session = models.InterviewSession(
         user_id=current_user.user_id,
-        role=interview.role,
-        difficulty=interview.difficulty
+        role=role,
+        difficulty=difficulty,
+        is_resume_based=interview.is_resume_based
     )
 
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
 
+    # Only pass resume context if Resume-Based Mode is active
+    resume_text = current_user.resume_text if interview.is_resume_based else None
+
     # Generate first question using Gemini
     question_text = generate_question(
-        interview.role,
-        interview.difficulty,
-        resume_text=current_user.resume_text
+        role,
+        difficulty,
+        resume_text=resume_text
     )
 
     # Save generated question
@@ -207,12 +215,15 @@ def submit_answer(
             "message": "Interview Completed"
         }
 
-    # Retrieve user resume for personalization
+    # Retrieve user resume for personalization ONLY if the session is Resume-Based
     session_obj = db.query(models.InterviewSession).filter(
         models.InterviewSession.session_id == answer.session_id
     ).first()
-    user_obj = session_obj.user if session_obj else None
-    resume_text = user_obj.resume_text if user_obj else None
+    
+    resume_text = None
+    if session_obj and session_obj.is_resume_based:
+        user_obj = session_obj.user
+        resume_text = user_obj.resume_text if user_obj else None
 
     # Generate next question
     next_question = generate_next_question(

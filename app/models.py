@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text,Float
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -18,6 +18,9 @@ class User(Base):
 
     resume_filename = Column(String(255), nullable=True)
     resume_text = Column(Text, nullable=True)
+    resume_skills = Column(Text, nullable=True)  # JSON serialized list
+    resume_summary = Column(Text, nullable=True) # Text summary
+    resume_role = Column(String(255), nullable=True)   # Extracted job role
 
     created_at = Column(DateTime, default=datetime.utcnow)
     interviews = relationship(
@@ -33,6 +36,7 @@ class InterviewSession(Base):
     role = Column(String(100))
     difficulty = Column(String(20))
     overall_score = Column(Float, nullable=True)
+    is_resume_based = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User", back_populates="interviews")
     report = relationship("InterviewReport", back_populates="session", uselist=False, cascade="all, delete-orphan")

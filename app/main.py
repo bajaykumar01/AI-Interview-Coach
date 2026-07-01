@@ -27,6 +27,22 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE interview_sessions MODIFY COLUMN overall_score FLOAT NULL"))
     except Exception:
         pass
+    try:
+        conn.execute(text("ALTER TABLE interview_sessions ADD COLUMN is_resume_based BOOLEAN DEFAULT FALSE"))
+    except Exception:
+        pass
+    try:
+        conn.execute(text("ALTER TABLE users ADD COLUMN resume_skills TEXT NULL"))
+    except Exception:
+        pass
+    try:
+        conn.execute(text("ALTER TABLE users ADD COLUMN resume_summary TEXT NULL"))
+    except Exception:
+        pass
+    try:
+        conn.execute(text("ALTER TABLE users ADD COLUMN resume_role VARCHAR(255) NULL"))
+    except Exception:
+        pass
     conn.commit()
 
 app = FastAPI()

@@ -1,101 +1,116 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { Mic, MicOff, Send, MessageSquare } from "lucide-react";
 
-function AnswerBox({
-    answer,
-    setAnswer,
-    submitAnswer
-}) {
-    const [isRecording, setIsRecording] = useState(false);
-    const recognitionRef = useRef(null);
-    const startTextRef = useRef('');
+function AnswerBox({ answer, setAnswer, submitAnswer }) {
+  const [isListening, setIsListening] = useState(false);
+  const [recognition, setRecognition] = useState(null);
 
-    useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            const rec = new SpeechRecognition();
-            rec.continuous = true;
-            rec.interimResults = true;
-            rec.lang = "en-US";
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
 
-            rec.onresult = (event) => {
-                let speechToText = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    speechToText += event.results[i][0].transcript;
-                }
-                const base = startTextRef.current;
-                setAnswer(base + (base && !base.endsWith(' ') ? ' ' : '') + speechToText);
-            };
+      rec.onresult = (event) => {
+        let interimTranscript = "";
+        let finalTranscript = "";
 
-            rec.onerror = (event) => {
-                console.error("Speech recognition error:", event.error);
-                setIsRecording(false);
-            };
-
-            rec.onend = () => {
-                setIsRecording(false);
-            };
-
-            recognitionRef.current = rec;
-        } else {
-            console.warn("Web Speech API is not supported in this browser.");
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
         }
 
-        return () => {
-            if (recognitionRef.current) {
-                recognitionRef.current.abort();
-            }
-        };
-    }, [setAnswer]);
-
-    const toggleRecording = () => {
-        if (!recognitionRef.current) {
-            alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
-            return;
+        // Set text input, adding spaces appropriately
+        if (finalTranscript) {
+          setAnswer((prev) => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript);
         }
+      };
 
-        if (isRecording) {
-            recognitionRef.current.stop();
-            setIsRecording(false);
-        } else {
-            startTextRef.current = answer;
-            setIsRecording(true);
-            recognitionRef.current.start();
-        }
-    };
+      rec.onerror = (e) => {
+        console.error("Speech recognition error:", e.error);
+        setIsListening(false);
+      };
 
-    return (
-        <div className="answer-card">
-            <h2>Your Answer</h2>
-            <textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Type or click the microphone to speak your answer..."
-                rows="8"
-            />
-            <br />
-            <div className="button-group">
-                <button
-                    className={`mic-btn ${isRecording ? 'recording' : ''}`}
-                    onClick={toggleRecording}
-                    type="button"
-                    title={isRecording ? "Stop voice recording" : "Start voice recording"}
-                >
-                    <svg viewBox="0 0 24 24" width="20" height="20" className="mic-icon">
-                        <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-                    </svg>
-                    {isRecording ? "Listening..." : "Speak Answer"}
-                </button>
+      rec.onend = () => {
+        setIsListening(false);
+      };
 
-                <button
-                    className="submit-btn"
-                    onClick={submitAnswer}
-                >
-                    Submit Answer
-                </button>
-            </div>
-        </div>
-    );
+      setRecognition(rec);
+    }
+  }, [setAnswer]);
+
+  const toggleListening = () => {
+    if (!recognition) {
+      alert("Speech recognition is not supported in this browser. Please use Google Chrome or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      recognition.start();
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 rounded-2xl border border-slate-800 text-left">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+          <MessageSquare size={16} /> Write or Speak Your Response
+        </h4>
+        {recognition && (
+          <button
+            onClick={toggleListening}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              isListening
+                ? "bg-red-500/10 border border-red-500/30 text-red-400 animate-pulse"
+                : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            {isListening ? (
+              <>
+                <MicOff size={14} /> Stop Listening
+              </>
+            ) : (
+              <>
+                <Mic size={14} /> Answer with Voice
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="relative mb-4">
+        <textarea
+          rows="6"
+          placeholder="Type your comprehensive response here, or click the mic button to transcribe..."
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          className="w-full bg-slate-950/50 border border-slate-850 focus:border-indigo-500/50 focus:outline-none rounded-xl p-4 text-slate-200 placeholder-slate-650 transition-colors text-sm leading-relaxed resize-none"
+        />
+        {isListening && (
+          <div className="absolute bottom-4 right-4 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+            <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider">Listening</span>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={submitAnswer}
+        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-600/10 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
+      >
+        Submit Response <Send size={16} />
+      </button>
+    </div>
+  );
 }
 
 export default AnswerBox;
-

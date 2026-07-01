@@ -135,12 +135,31 @@ def upload_resume(
 
         current_user.resume_filename = file.filename
         current_user.resume_text = extracted_text
+
+        # Call Gemini to extract profile metadata
+        from app.gemini import extract_resume_profile
+        import json
+        try:
+            profile_data = extract_resume_profile(extracted_text)
+            current_user.resume_skills = json.dumps(profile_data["skills"])
+            current_user.resume_summary = profile_data["summary"]
+            current_user.resume_role = profile_data["recommended_role"]
+        except Exception as ge:
+            print("Gemini resume profiling failed:", str(ge))
+            # Fallback values
+            current_user.resume_skills = json.dumps(["Software Engineering"])
+            current_user.resume_summary = "Candidate profile loaded successfully."
+            current_user.resume_role = "Software Developer"
+
         db.commit()
         db.refresh(current_user)
 
         return {
             "message": "Resume uploaded and text extracted successfully.",
-            "filename": file.filename
+            "filename": file.filename,
+            "resume_role": current_user.resume_role,
+            "resume_summary": current_user.resume_summary,
+            "resume_skills": current_user.resume_skills
         }
 
     except HTTPException as he:
@@ -151,6 +170,82 @@ def upload_resume(
             status_code=500,
             detail=f"An error occurred while processing the PDF: {str(e)}"
         )
+
+
+@router.get("/stats", response_model=dict)
+def get_interview_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    sessions = (
+        db.query(models.InterviewSession)
+        .filter(
+            models.InterviewSession.user_id == current_user.user_id,
+            models.InterviewSession.overall_score.isnot(None)
+        )
+        .all()
+    )
+
+    total_interviews = len(sessions)
+
+    if total_interviews > 0:
+        average_score = sum(s.overall_score for s in sessions) / total_interviews
+        best_score = max(s.overall_score for s in sessions)
+    else:
+        average_score = 0.0
+        best_score = 0.0
+
+    recent_sessions = (
+        db.query(models.InterviewSession)
+        .filter(
+            models.InterviewSession.user_id == current_user.user_id,
+            models.InterviewSession.overall_score.isnot(None)
+        )
+        .order_by(models.InterviewSession.created_at.asc())
+        .all()
+    )
+
+    score_history = []
+    for idx, s in enumerate(recent_sessions[-7:]):
+        score_history.append({
+            "name": f"Session {idx+1}",
+            "score": round(s.overall_score, 1),
+            "role": s.role
+        })
+
+    resume_based_count = (
+        db.query(models.InterviewSession)
+        .filter(
+            models.InterviewSession.user_id == current_user.user_id,
+            models.InterviewSession.is_resume_based == True
+        )
+        .count()
+    )
+
+    configured_count = (
+        db.query(models.InterviewSession)
+        .filter(
+            models.InterviewSession.user_id == current_user.user_id,
+            models.InterviewSession.is_resume_based == False
+        )
+        .count()
+    )
+
+    return {
+        "total_interviews": total_interviews,
+        "average_score": round(average_score, 1),
+        "best_score": round(best_score, 1),
+        "resume_uploaded": current_user.resume_filename is not None,
+        "resume_filename": current_user.resume_filename,
+        "resume_role": current_user.resume_role,
+        "resume_skills": current_user.resume_skills,
+        "resume_summary": current_user.resume_summary,
+        "score_history": score_history,
+        "mode_distribution": [
+            {"name": "Resume-Based", "value": resume_based_count},
+            {"name": "Configure Mode", "value": configured_count}
+        ]
+    }
 
 
 @router.get(

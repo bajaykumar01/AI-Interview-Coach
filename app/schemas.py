@@ -19,6 +19,9 @@ class UserResponse(BaseModel):
     full_name: str
     email: EmailStr
     resume_filename: str | None = None
+    resume_skills: str | None = None
+    resume_summary: str | None = None
+    resume_role: str | None = None
 
     class Config:
         from_attributes = True
@@ -36,6 +39,7 @@ class Token(BaseModel):
 class InterviewCreate(BaseModel):
     role: str
     difficulty: str
+    is_resume_based: bool = False
 
 
 class InterviewResponse(BaseModel):
