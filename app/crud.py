@@ -8,7 +8,8 @@ from app.gemini import (
     generate_question,
     generate_next_question
 )
-
+from app.gemini import generate_interview_report
+import json
 def create_user(db: Session, user: schemas.UserCreate):
 
     hashed_password = hash_password(user.password)
@@ -284,7 +285,7 @@ def get_interview_history(
 
 
 def finish_interview(db: Session, session_id: int):
-    # Find all answers for this session
+
     answers = db.query(models.Answer).filter(
         models.Answer.session_id == session_id
     ).all()
@@ -300,14 +301,51 @@ def finish_interview(db: Session, session_id: int):
 
     if interview:
         interview.overall_score = average_score
-        db.commit()
+
+    # Build QA history for Gemini
+    QA_history = []
+
+    for a in answers:
+        QA_history.append({
+            "question": a.question,
+            "answer": a.answer,
+            "score": a.ai_score,
+            "feedback": a.ai_feedback
+        })
+
+    # Generate AI Report
+    report = generate_interview_report(
+        interview.role,
+        interview.difficulty,
+        QA_history
+    )
+    old = db.query(models.InterviewReport).filter(
+        models.InterviewReport.session_id == session_id
+    ).first()
+
+    if old:
+        db.delete(old)
+    # Save into InterviewReport table
+    db_report = models.InterviewReport(
+        session_id=session_id,
+        overall_score=report["overall_score"],
+        strengths=json.dumps(report["strengths"]),
+        weak_topics=json.dumps(report["weak_topics"]),
+        communication_rating=report["communication_rating"],
+        confidence_rating=report["confidence_rating"],
+        technical_accuracy=report["technical_accuracy"],
+        recommended_topics=json.dumps(report["recommended_topics"]),
+        suggestions=json.dumps(report["suggestions"])
+    )
+
+    db.add(db_report)
+    db.commit()
 
     return {
         "session_id": session_id,
         "overall_score": average_score,
         "total_questions": len(answers)
     }
-
 
 def get_interview_report(db: Session, session_id: int):
     report = db.query(models.InterviewReport).filter(
