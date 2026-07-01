@@ -76,22 +76,15 @@ function Interview() {
             console.log(response.data);
 
             if (response.data.completed) {
-
-                    navigate("/result", {
-
-                        state: {
-
-                            overall_score: response.data.overall_score,
-
-                            total_questions: 3
-
-                        }
-
-                    });
-
-                    return;
-
-                }
+                navigate("/result", {
+                    state: {
+                        overall_score: response.data.overall_score,
+                        total_questions: 5,
+                        session_id: sessionId
+                    }
+                });
+                return;
+            }
 
             setScore(response.data.ai_score);
 
@@ -157,7 +150,7 @@ function Interview() {
 
             <h1>AI Interview Coach</h1>
 
-            <h3>Question {questionNumber} of 3</h3>
+            <h3>Question {questionNumber} of 5</h3>
 
             <QuestionCard question={question} />
 

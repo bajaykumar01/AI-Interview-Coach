@@ -59,7 +59,8 @@ def create_interview(
     # Generate first question using Gemini
     question_text = generate_question(
         interview.role,
-        interview.difficulty
+        interview.difficulty,
+        resume_text=current_user.resume_text
     )
 
     # Save generated question
@@ -129,8 +130,8 @@ def submit_answer(
     db.commit()
     db.refresh(new_answer)
 
-    # If interview is completed (5 questions)
-    if question.question_number >= 2:
+    # If interview is completed (5 questions limit)
+    if question.question_number >= 5:
 
         answers = db.query(models.Answer).filter(
             models.Answer.session_id == answer.session_id
@@ -144,9 +145,61 @@ def submit_answer(
             models.InterviewSession.session_id == answer.session_id
         ).first()
 
-        interview.overall_score = average_score
+        if interview:
+            interview.overall_score = average_score
+            db.commit()
 
-        db.commit()
+        # Build QA history for report generation
+        qa_history = []
+        for ans in answers:
+            q = db.query(models.Question).filter(models.Question.question_id == ans.question_id).first()
+            qa_history.append({
+                "question": q.question_text if q else "",
+                "answer": ans.answer_text,
+                "score": ans.ai_score,
+                "feedback": ans.ai_feedback
+            })
+
+        # Generate detailed AI Report
+        try:
+            from app.gemini import generate_interview_report
+            import json
+            report_data = generate_interview_report(
+                role=interview.role if interview else "General Developer",
+                difficulty=interview.difficulty if interview else "Medium",
+                QA_history=qa_history
+            )
+
+            new_report = models.InterviewReport(
+                session_id=answer.session_id,
+                overall_score=report_data["overall_score"],
+                strengths=json.dumps(report_data["strengths"]),
+                weak_topics=json.dumps(report_data["weak_topics"]),
+                communication_rating=report_data["communication_rating"],
+                confidence_rating=report_data["confidence_rating"],
+                technical_accuracy=report_data["technical_accuracy"],
+                recommended_topics=json.dumps(report_data["recommended_topics"]),
+                suggestions=json.dumps(report_data["suggestions"])
+            )
+            db.add(new_report)
+            db.commit()
+        except Exception as e:
+            print("Failed to generate AI Report:", str(e))
+            # Fallback report if Gemini fails
+            import json
+            new_report = models.InterviewReport(
+                session_id=answer.session_id,
+                overall_score=average_score,
+                strengths=json.dumps(["Demonstrated knowledge in technical topics"]),
+                weak_topics=json.dumps(["Needs revision on specific questions"]),
+                communication_rating="Good",
+                confidence_rating="Moderate",
+                technical_accuracy=f"{int(average_score * 10)}%",
+                recommended_topics=json.dumps(["System Architecture", "Role-based topics"]),
+                suggestions=json.dumps(["Practice answering clearly", "Elaborate with examples"])
+            )
+            db.add(new_report)
+            db.commit()
 
         return {
             "completed": True,
@@ -154,13 +207,21 @@ def submit_answer(
             "message": "Interview Completed"
         }
 
+    # Retrieve user resume for personalization
+    session_obj = db.query(models.InterviewSession).filter(
+        models.InterviewSession.session_id == answer.session_id
+    ).first()
+    user_obj = session_obj.user if session_obj else None
+    resume_text = user_obj.resume_text if user_obj else None
+
     # Generate next question
     next_question = generate_next_question(
         role=question.role,
         difficulty=question.difficulty,
         previous_question=question.question_text,
         previous_answer=answer.answer_text,
-        score=ai_result["score"]
+        score=ai_result["score"],
+        resume_text=resume_text
     )
 
     generated_question = models.Question(
@@ -209,3 +270,72 @@ def get_interview_history(
         )
         .all()
     )
+
+
+def finish_interview(db: Session, session_id: int):
+    # Find all answers for this session
+    answers = db.query(models.Answer).filter(
+        models.Answer.session_id == session_id
+    ).all()
+
+    if not answers:
+        return None
+
+    average_score = sum(a.ai_score for a in answers) / len(answers)
+
+    interview = db.query(models.InterviewSession).filter(
+        models.InterviewSession.session_id == session_id
+    ).first()
+
+    if interview:
+        interview.overall_score = average_score
+        db.commit()
+
+    return {
+        "session_id": session_id,
+        "overall_score": average_score,
+        "total_questions": len(answers)
+    }
+
+
+def get_interview_report(db: Session, session_id: int):
+    report = db.query(models.InterviewReport).filter(
+        models.InterviewReport.session_id == session_id
+    ).first()
+    if not report:
+        return None
+
+    import json
+    try:
+        strengths_list = json.loads(report.strengths)
+    except Exception:
+        strengths_list = [report.strengths]
+
+    try:
+        weak_topics_list = json.loads(report.weak_topics)
+    except Exception:
+        weak_topics_list = [report.weak_topics]
+
+    try:
+        recommended_topics_list = json.loads(report.recommended_topics)
+    except Exception:
+        recommended_topics_list = [report.recommended_topics]
+
+    try:
+        suggestions_list = json.loads(report.suggestions)
+    except Exception:
+        suggestions_list = [report.suggestions]
+
+    return {
+        "report_id": report.report_id,
+        "session_id": report.session_id,
+        "overall_score": report.overall_score,
+        "strengths": strengths_list,
+        "weak_topics": weak_topics_list,
+        "communication_rating": report.communication_rating,
+        "confidence_rating": report.confidence_rating,
+        "technical_accuracy": report.technical_accuracy,
+        "recommended_topics": recommended_topics_list,
+        "suggestions": suggestions_list,
+        "created_at": report.created_at
+    }

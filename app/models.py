@@ -16,10 +16,13 @@ class User(Base):
 
     password_hash = Column(String(255), nullable=False)
 
+    resume_filename = Column(String(255), nullable=True)
+    resume_text = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     interviews = relationship(
-    "InterviewSession",
-    back_populates="user"
+        "InterviewSession",
+        back_populates="user"
     )
 
 class InterviewSession(Base):
@@ -29,9 +32,10 @@ class InterviewSession(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"))
     role = Column(String(100))
     difficulty = Column(String(20))
-    overall_score = Column(Integer, nullable=True)
+    overall_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User", back_populates="interviews")
+    report = relationship("InterviewReport", back_populates="session", uselist=False, cascade="all, delete-orphan")
         
 class Question(Base):
 
@@ -71,3 +75,20 @@ class Answer(Base):
     ai_feedback = Column(Text, nullable=True)
 
     submitted_at = Column(DateTime, default=datetime.utcnow)
+
+class InterviewReport(Base):
+    __tablename__ = "interview_reports"
+
+    report_id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("interview_sessions.session_id"), unique=True)
+    overall_score = Column(Float, nullable=False)
+    strengths = Column(Text, nullable=False)            # Stored as JSON string or comma-separated text
+    weak_topics = Column(Text, nullable=False)          # Stored as JSON string or comma-separated text
+    communication_rating = Column(String(100), nullable=False)
+    confidence_rating = Column(String(100), nullable=False)
+    technical_accuracy = Column(String(100), nullable=False)
+    recommended_topics = Column(Text, nullable=False)   # Stored as JSON string or comma-separated text
+    suggestions = Column(Text, nullable=False)          # Stored as JSON string or comma-separated text
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("InterviewSession", back_populates="report")

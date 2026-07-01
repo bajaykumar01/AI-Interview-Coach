@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     user_id: int
     full_name: str
     email: EmailStr
+    resume_filename: str | None = None
 
     class Config:
         from_attributes = True
@@ -93,6 +94,23 @@ class InterviewHistory(BaseModel):
     role: str
     difficulty: str
     overall_score: float | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InterviewReportResponse(BaseModel):
+    report_id: int
+    session_id: int
+    overall_score: float
+    strengths: list[str]
+    weak_topics: list[str]
+    communication_rating: str
+    confidence_rating: str
+    technical_accuracy: str
+    recommended_topics: list[str]
+    suggestions: list[str]
     created_at: datetime
 
     class Config:
